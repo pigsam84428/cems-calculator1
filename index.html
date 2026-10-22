@@ -1,780 +1,570 @@
-<!DOCTYPE html>
-<html lang="zh-TW" class="dark">
+ <!DOCTYPE html>
+<html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>CEMS MIR9000 校正與 K 值計算工具</title>
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+TC:wght@400;600;700;900&display=swap');
-    
-    body {
-      font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
-      -webkit-tap-highlight-color: transparent;
-    }
-    
-    .font-mono-num {
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    /* Large touch target buttons for field work */
-    .btn-segmented {
-      min-height: 48px;
-      touch-action: manipulation;
-    }
-
-    ::-webkit-scrollbar {
-      width: 4px;
-      height: 4px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #0f172a;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #334155;
-      border-radius: 2px;
-    }
-  </style>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              500: '#0284c7',
-              600: '#0369a1',
-            }
-          }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CEMS MIR9000 智慧校正計算與雲端同步工具</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <style>
+        .btn-active {
+            background-color: #2563eb !important;
+            color: white !important;
+            border-color: #1d4ed8 !important;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
         }
-      }
-    }
-  </script>
+    </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col pb-10">
+<body class="bg-slate-100 text-slate-800 min-h-screen pb-12 font-sans">
 
-  <!-- Mobile Header -->
-  <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 shadow-lg px-4 py-3">
-    <div class="max-w-3xl mx-auto flex justify-between items-center">
-      <div class="flex items-center space-x-2">
-        <div class="p-2 bg-sky-500/20 rounded-xl text-sky-400 border border-sky-500/30">
-          <i data-lucide="gauge" class="w-6 h-6"></i>
-        </div>
-        <div>
-          <h1 class="text-base font-black text-white tracking-wide">MIR9000 校正工具</h1>
-          <p class="text-[11px] text-slate-400 font-medium">BC / K 值獨立記錄版</p>
-        </div>
-      </div>
-      <button onclick="clearAllFields()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-bold flex items-center space-x-1">
-        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
-        <span>重置</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- Main Container -->
-  <main class="flex-grow max-w-3xl w-full mx-auto px-3 sm:px-4 py-4 space-y-4">
-
-    <!-- 1. Plant Selection Segmented Buttons -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-md">
-      <div class="text-xs font-bold text-slate-400 mb-1.5 px-1 flex items-center space-x-1">
-        <i data-lucide="building-2" class="w-3.5 h-3.5 text-emerald-400"></i>
-        <span>選擇廠別</span>
-      </div>
-      <div class="grid grid-cols-2 gap-2">
-        <button id="plantP1" onclick="setPlant('一廠')" class="btn-segmented rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all bg-emerald-600 text-white shadow-lg border border-emerald-500">
-          <span>一廠</span>
-        </button>
-        <button id="plantP2" onclick="setPlant('二廠')" class="btn-segmented rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200">
-          <span>二廠</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 2. Gas Item Selection Segmented Buttons -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-md">
-      <div class="text-xs font-bold text-slate-400 mb-1.5 px-1 flex items-center justify-between">
-        <span class="flex items-center space-x-1">
-          <i data-lucide="flask-conical" class="w-3.5 h-3.5 text-sky-400"></i>
-          <span>校正項目</span>
-        </span>
-        <span id="modeBadge" class="text-[10px] font-mono-num font-bold text-sky-400 bg-sky-950 px-2 py-0.5 rounded border border-sky-800">
-          O2 BC 模式 (7位小數)
-        </span>
-      </div>
-      <div class="grid grid-cols-3 gap-2">
-        <button id="gasO2" onclick="setGas('O2')" class="btn-segmented rounded-xl font-black text-sm flex flex-col items-center justify-center transition-all bg-sky-600 text-white border border-sky-400 shadow-md">
-          <span>O2</span>
-          <span class="text-[10px] font-normal opacity-80">BC模式</span>
-        </button>
-        <button id="gasNO" onclick="setGas('NO')" class="btn-segmented rounded-xl font-black text-sm flex flex-col items-center justify-center transition-all bg-slate-950 text-slate-300 border border-slate-800">
-          <span>NO</span>
-          <span class="text-[10px] font-normal text-slate-500">K模式</span>
-        </button>
-        <button id="gasNO2" onclick="setGas('NO2')" class="btn-segmented rounded-xl font-black text-sm flex flex-col items-center justify-center transition-all bg-slate-950 text-slate-300 border border-slate-800">
-          <span>NO2</span>
-          <span class="text-[10px] font-normal text-slate-500">K模式</span>
-        </button>
-        <button id="gasSOx" onclick="setGas('SOx')" class="btn-segmented rounded-xl font-black text-sm flex flex-col items-center justify-center transition-all bg-slate-950 text-slate-300 border border-slate-800">
-          <span>SOx</span>
-          <span class="text-[10px] font-normal text-slate-500">K模式</span>
-        </button>
-        <button id="gasCO" onclick="setGas('CO')" class="btn-segmented rounded-xl font-black text-sm flex flex-col items-center justify-center transition-all bg-slate-950 text-slate-300 border border-slate-800">
-          <span>CO</span>
-          <span class="text-[10px] font-normal text-slate-500">K模式</span>
-        </button>
-        <button id="gasHCL" onclick="setGas('HCL')" class="btn-segmented rounded-xl font-black text-sm flex flex-col items-center justify-center transition-all bg-slate-950 text-slate-300 border border-slate-800">
-          <span>HCL</span>
-          <span class="text-[10px] font-normal text-slate-500">K模式</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 3. Form Input Section -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-4">
-      
-      <!-- Gas Unit Indicator -->
-      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-        <span id="inputSectionTitle" class="text-sm font-bold text-white">輸入校正數據</span>
-        <span id="gasUnitBadge" class="text-xs font-bold text-sky-400 bg-sky-950 border border-sky-800 px-2.5 py-1 rounded-lg font-mono-num">%</span>
-      </div>
-
-      <!-- O2 Inputs (Visible when O2 selected) -->
-      <div id="o2Form" class="space-y-3">
-        <!-- Zero / Low Point -->
-        <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-3 space-y-2">
-          <div class="text-xs font-bold text-emerald-400 flex items-center space-x-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>1. 低點 / 零點 (Zero)</span>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-[11px] font-semibold text-slate-400 mb-1">目標濃度 Target</label>
-              <input type="number" id="o2ZeroTarget" value="0.0000000" step="any" oninput="calculate()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-mono-num font-bold text-sm focus:border-sky-500 outline-none">
+    <!-- 頂部導航列與雲端狀態 -->
+    <header class="bg-blue-600 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 class="text-lg md:text-xl font-bold tracking-wide">CEMS MIR9000 校正工具</h1>
+            <div id="sync-status" class="flex items-center space-x-2 bg-blue-700 px-3 py-1.5 rounded-full text-xs font-medium">
+                <span id="status-dot" class="w-3 h-3 rounded-full bg-yellow-400 animate-pulse"></span>
+                <span id="status-text">連線雲端中...</span>
             </div>
-            <div>
-              <label class="block text-[11px] font-semibold text-slate-400 mb-1">原始訊號 Raw</label>
-              <input type="number" id="o2ZeroRaw" value="0.1200000" step="any" oninput="calculate()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-mono-num font-bold text-sm focus:border-sky-500 outline-none">
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 mt-4 space-y-4">
+
+        <!-- Firebase 設定開關 (首次使用或未設定時可手動填入) -->
+        <div id="firebase-config-card" class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 hidden">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-sm font-bold text-slate-700">⚙️ 雲端同步設定 (Firebase Config)</h2>
+                <button onclick="toggleConfig()" class="text-xs text-blue-600 underline">收合</button>
             </div>
-          </div>
+            <p class="text-xs text-slate-500 mb-2">若要跨裝置同步，請在此貼上您的 Firebase Database 網址與設定：</p>
+            <textarea id="fb-config-input" rows="3" class="w-full text-xs p-2 border rounded font-mono" placeholder='{ "databaseURL": "https://YOUR-DB.firebaseio.com" }'></textarea>
+            <button onclick="saveFirebaseConfig()" class="mt-2 bg-blue-600 text-white text-xs px-4 py-2 rounded font-medium hover:bg-blue-700">儲存並連線</button>
         </div>
 
-        <!-- Span / High Point -->
-        <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-3 space-y-2">
-          <div class="text-xs font-bold text-sky-400 flex items-center space-x-1">
-            <span class="w-2 h-2 rounded-full bg-sky-400"></span>
-            <span>2. 高點 / 滿量程 (Span)</span>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-[11px] font-semibold text-slate-400 mb-1">目標濃度 Target</label>
-              <input type="number" id="o2SpanTarget" value="20.9000000" step="any" oninput="calculate()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-mono-num font-bold text-sm focus:border-sky-500 outline-none">
+        <!-- 1. 廠別選擇 (大按鈕觸控優化) -->
+        <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+            <label class="block text-sm font-bold text-slate-600 mb-2">🏭 選擇廠別</label>
+            <div class="grid grid-cols-2 gap-3" id="plant-selector">
+                <button type="button" onclick="setPlant('一廠')" id="btn-plant-一廠" class="py-3 px-4 text-center text-lg font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95">一廠</button>
+                <button type="button" onclick="setPlant('二廠')" id="btn-plant-二廠" class="py-3 px-4 text-center text-lg font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95">二廠</button>
             </div>
-            <div>
-              <label class="block text-[11px] font-semibold text-slate-400 mb-1">原始訊號 Raw</label>
-              <input type="number" id="o2SpanRaw" value="20.1500000" step="any" oninput="calculate()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-mono-num font-bold text-sm focus:border-sky-500 outline-none">
+        </section>
+
+        <!-- 2. 校正項目選擇 (大按鈕觸控優化) -->
+        <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+            <label class="block text-sm font-bold text-slate-600 mb-2">📊 選擇校正項目</label>
+            <div class="grid grid-cols-3 gap-2 md:grid-cols-6" id="item-selector">
+                <button type="button" onclick="setItem('O2')" id="btn-item-O2" class="py-3 text-center text-base font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95">O2</button>
+                <button type="button" onclick="setItem('NO')" id="btn-item-NO" class="py-3 text-center text-base font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95">NO</button>
+                <button type="button" onclick="setItem('NO2')" id="btn-item-NO2" class="py-3 text-center text-base font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95">NO2</button>
+                <button type="button" onclick="setItem('SOx')" id="btn-item-SOx" class="py-3 text-center text-base font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95">SOx</button>
+                <button type="button" onclick="setItem('CO')" id="btn-item-CO" class="py-3 text-center text-base font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95">CO</button>
+                <button type="button" onclick="setItem('HCL')" id="btn-item-HCL" class="py-3 text-center text-base font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95">HCL</button>
             </div>
-          </div>
-        </div>
-      </div>
+        </section>
 
-      <!-- Pollutants Form (Visible when NO, NO2, SOx, CO, HCL selected) -->
-      <div id="pollutantForm" class="hidden space-y-3">
-        <div>
-          <label class="block text-xs font-bold text-amber-400 mb-1">1. 當前現場顯示濃度 (Current Conc)</label>
-          <div class="relative">
-            <input type="number" id="pollutantCurrent" value="180.500" step="any" oninput="calculate()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white font-mono-num font-black text-base focus:border-amber-500 outline-none">
-            <span class="unitText absolute right-3 top-3 text-xs text-slate-500 font-mono-num font-bold">ppm</span>
-          </div>
-        </div>
+        <!-- 3. 計算面板 (動態切換 O2 BC 或 污染物 K 值) -->
+        <div id="calculator-container" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+            <!-- 模式 A: O2 BC 值校正 (7位小數) -->
+            <div id="mode-o2" class="space-y-4">
+                <div class="border-b pb-2 flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-blue-600">O2 雙點線性校正 (BC 值)</h2>
+                    <span class="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium">精確至小數點 7 位</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-slate-50 p-3 rounded-xl border">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">零點 (Low Point)</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <span class="text-xs text-slate-400">原始訊號 (X0)</span>
+                                <input type="number" id="o2-x0" step="any" class="w-full mt-1 p-2 text-lg font-bold border rounded-lg bg-white" placeholder="0.00">
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-400">目標濃度 (Y0)</span>
+                                <input type="number" id="o2-y0" step="any" class="w-full mt-1 p-2 text-lg font-bold border rounded-lg bg-white" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl border">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">高點 (High Point)</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <span class="text-xs text-slate-400">原始訊號 (X1)</span>
+                                <input type="number" id="o2-x1" step="any" class="w-full mt-1 p-2 text-lg font-bold border rounded-lg bg-white" placeholder="0.00">
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-400">目標濃度 (Y1)</span>
+                                <input type="number" id="o2-y1" step="any" class="w-full mt-1 p-2 text-lg font-bold border rounded-lg bg-white" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="calculateO2()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl text-lg shadow-md transition active:scale-98">計算 O2 (新 B、新 C)</button>
 
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block text-xs font-bold text-sky-400 mb-1">2. 當前 K 值 (Current K)</label>
-            <input type="number" id="pollutantCurrentK" value="1.050" step="any" oninput="calculate()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-mono-num font-bold text-sm focus:border-sky-500 outline-none">
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-emerald-400 mb-1">3. 目標鋼瓶濃度 (Target)</label>
-            <div class="relative">
-              <input type="number" id="pollutantTarget" value="200.000" step="any" oninput="calculate()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-mono-num font-bold text-sm focus:border-emerald-500 outline-none">
+                <!-- 顯示結果 -->
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
+                        <div class="text-xs text-blue-600 font-bold mb-1">新 B 值 (Slope)</div>
+                        <div id="res-o2-b" class="text-xl md:text-2xl font-black text-blue-900 tracking-wider">0.0000000</div>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
+                        <div class="text-xs text-blue-600 font-bold mb-1">新 C 值 (Offset)</div>
+                        <div id="res-o2-c" class="text-xl md:text-2xl font-black text-blue-900 tracking-wider">0.0000000</div>
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-    </div>
+            <!-- 模式 B: 污染物 K 值動態調整 (3位小數) -->
+            <div id="mode-k" class="space-y-4 hidden">
+                <div class="border-b pb-2 flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-emerald-600" id="k-mode-title">污染物 K 值動態調整</h2>
+                    <span class="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-medium">調整後 K 值精確至小數點 3 位</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">當前濃度</label>
+                        <input type="number" id="k-current-conc" step="any" class="w-full p-2.5 text-lg font-bold border rounded-xl bg-slate-50" placeholder="例: 45.2">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">當前 K 值</label>
+                        <input type="number" id="k-current-k" step="any" class="w-full p-2.5 text-lg font-bold border rounded-xl bg-slate-50" placeholder="例: 1.050">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">目標濃度 (標氣)</label>
+                        <input type="number" id="k-target-conc" step="any" class="w-full p-2.5 text-lg font-bold border rounded-xl bg-slate-50" placeholder="例: 50.0">
+                    </div>
+                </div>
+                <button onclick="calculateK()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl text-lg shadow-md transition active:scale-98">計算調整後 K 值</button>
 
-    <!-- 4. Large Output Display Cards -->
-    <div class="bg-slate-900 border-2 border-sky-500/50 rounded-2xl p-4 shadow-xl space-y-3">
-      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-        <span class="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center space-x-1">
-          <i data-lucide="calculator" class="w-4 h-4 text-sky-400"></i>
-          <span>計算結果 (Result)</span>
-        </span>
-        <span id="currentSelectionTag" class="text-xs font-bold text-emerald-400 bg-emerald-950 px-2.5 py-0.5 rounded border border-emerald-800">一廠 - O2</span>
-      </div>
+                <!-- 顯示結果 (螢幕只顯示當前K值與調整後K值) -->
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center">
+                        <div class="text-xs text-emerald-600 font-bold mb-1">當前 K 值</div>
+                        <div id="res-k-current" class="text-2xl md:text-3xl font-black text-emerald-900 tracking-wider">0.000</div>
+                    </div>
+                    <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center">
+                        <div class="text-xs text-emerald-600 font-bold mb-1">調整後 K 值</div>
+                        <div id="res-k-new" class="text-2xl md:text-3xl font-black text-emerald-900 tracking-wider">0.000</div>
+                    </div>
+                </div>
+            </div>
 
-      <!-- O2 Results Display (New B & New C) -->
-      <div id="o2ResultsDisplay" class="grid grid-cols-1 gap-3">
-        <div class="bg-slate-950 border border-amber-500/30 rounded-xl p-3 text-center">
-          <div class="text-xs font-bold text-amber-400 mb-0.5">新 B 值 (Slope) [7位小數]</div>
-          <div id="outB" class="text-2xl sm:text-3xl font-extrabold font-mono-num text-amber-300 break-all">1.0000000</div>
-        </div>
-
-        <div class="bg-slate-950 border border-emerald-500/30 rounded-xl p-3 text-center">
-          <div class="text-xs font-bold text-emerald-400 mb-0.5">新 C 值 (Offset) [7位小數]</div>
-          <div id="outC" class="text-2xl sm:text-3xl font-extrabold font-mono-num text-emerald-300 break-all">0.0000000</div>
-        </div>
-      </div>
-
-      <!-- Pollutant Results Display (Current K vs New K Only) -->
-      <div id="pollutantResultsDisplay" class="hidden grid grid-cols-2 gap-3">
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
-          <div class="text-xs font-bold text-slate-400 mb-1">當前 K 值 (Current K)</div>
-          <div id="outCurrentK" class="text-xl sm:text-2xl font-black font-mono-num text-slate-300">1.050</div>
-        </div>
-
-        <div class="bg-slate-950 border-2 border-sky-400 rounded-xl p-3 text-center shadow-lg">
-          <div class="text-xs font-black text-sky-400 mb-1">調整後 K 值 (New K)</div>
-          <div id="outNewK" class="text-2xl sm:text-3xl font-black font-mono-num text-sky-300 break-all">1.163</div>
-        </div>
-      </div>
-
-      <!-- Actions -->
-      <div class="grid grid-cols-2 gap-2 pt-1">
-        <button onclick="copyToClipboard()" class="btn-segmented bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5">
-          <i data-lucide="copy" class="w-4 h-4 text-sky-400"></i>
-          <span>複製參數</span>
-        </button>
-
-        <button onclick="saveRecord()" class="btn-segmented bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm flex items-center justify-center space-x-1.5 shadow-lg">
-          <i data-lucide="save" class="w-4 h-4"></i>
-          <span>儲存校正紀錄</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 5. Separated History Log Tables -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
-      
-      <!-- Main Record Header & Tab Switcher -->
-      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-        <div class="flex items-center space-x-1.5">
-          <i data-lucide="history" class="w-4 h-4 text-sky-400"></i>
-          <h2 class="text-sm font-bold text-white">校正紀錄備份</h2>
-        </div>
-      </div>
-
-      <!-- Separated Record Tabs -->
-      <div class="grid grid-cols-2 gap-2">
-        <button id="tabO2Btn" onclick="switchRecordTab('O2')" class="py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1 bg-sky-600 text-white border border-sky-400">
-          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-          <span>O2 BC 校正紀錄</span>
-        </button>
-        <button id="tabPollutantBtn" onclick="switchRecordTab('POLLUTANT')" class="py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1 bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200">
-          <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
-          <span>污染物 K 值紀錄</span>
-        </button>
-      </div>
-
-      <!-- Filter Controls Section -->
-      <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 flex flex-wrap gap-2 justify-between items-center">
-        
-        <!-- Filters -->
-        <div class="flex items-center space-x-2">
-          <!-- Filter Plant -->
-          <select id="historyFilterPlant" onchange="renderHistoryTables()" class="bg-slate-900 border border-slate-700 text-emerald-400 font-bold text-xs rounded-lg px-2 py-1.5 outline-none">
-            <option value="ALL">全部廠別</option>
-            <option value="一廠">一廠</option>
-            <option value="二廠">二廠</option>
-          </select>
-
-          <!-- Filter Item (Only visible for Pollutant Tab) -->
-          <select id="historyFilterItem" onchange="renderHistoryTables()" class="bg-slate-900 border border-slate-700 text-sky-400 font-bold text-xs rounded-lg px-2 py-1.5 outline-none">
-            <option value="ALL">全部項目</option>
-            <option value="NO">NO</option>
-            <option value="NO2">NO2</option>
-            <option value="SOx">SOx</option>
-            <option value="CO">CO</option>
-            <option value="HCL">HCL</option>
-          </select>
+            <!-- 儲存按鈕 -->
+            <button onclick="saveRecord()" class="w-full mt-4 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl shadow transition active:scale-98 flex items-center justify-center space-x-2">
+                <span>💾 儲存至雲端歷史紀錄</span>
+            </button>
         </div>
 
-        <!-- Export CSV Button -->
-        <button onclick="exportActiveCSV()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 rounded-lg text-xs font-bold flex items-center space-x-1">
-          <i data-lucide="download" class="w-3.5 h-3.5"></i>
-          <span>匯出 CSV</span>
-        </button>
-      </div>
+        <!-- 4. 歷史紀錄查詢與分頁 (BC值與K值分開記錄) -->
+        <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-3 gap-2">
+                <h2 class="text-base font-bold text-slate-700">📜 雲端歷史校正紀錄</h2>
+                <div class="flex space-x-2">
+                    <button onclick="switchLogTab('o2')" id="tab-log-o2" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white shadow-sm">O2 BC 校正紀錄</button>
+                    <button onclick="switchLogTab('k')" id="tab-log-k" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 text-slate-700">污染物 K 值紀錄</button>
+                </div>
+            </div>
 
-      <!-- TABLE 1: O2 BC Log Section -->
-      <div id="o2TableContainer" class="space-y-2">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-slate-300">
-            <thead class="bg-slate-950 text-slate-400 font-mono-num border-b border-slate-800">
-              <tr>
-                <th class="py-2 px-2">時間</th>
-                <th class="py-2 px-2">廠別</th>
-                <th class="py-2 px-2 text-amber-400">新 B 值</th>
-                <th class="py-2 px-2 text-emerald-400">新 C 值</th>
-                <th class="py-2 px-2 text-center">刪除</th>
-              </tr>
-            </thead>
-            <tbody id="o2HistoryTbody" class="divide-y divide-slate-800/60 font-mono-num">
-              <!-- Dynamic O2 Rows -->
-            </tbody>
-          </table>
-        </div>
-      </div>
+            <!-- 篩選器 -->
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">廠別篩選</label>
+                    <select id="filter-plant" onchange="renderHistory()" class="w-full p-2 text-sm border rounded-xl bg-slate-50">
+                        <option value="全部">全部廠別</option>
+                        <option value="一廠">一廠</option>
+                        <option value="二廠">二廠</option>
+                    </select>
+                </div>
+                <div id="filter-item-container">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">項目篩選</label>
+                    <select id="filter-item" onchange="renderHistory()" class="w-full p-2 text-sm border rounded-xl bg-slate-50">
+                        <option value="全部">全部項目</option>
+                        <option value="NO">NO</option>
+                        <option value="NO2">NO2</option>
+                        <option value="SOx">SOx</option>
+                        <option value="CO">CO</option>
+                        <option value="HCL">HCL</option>
+                    </select>
+                </div>
+            </div>
 
-      <!-- TABLE 2: Pollutant K Log Section -->
-      <div id="pollutantTableContainer" class="hidden space-y-2">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-slate-300">
-            <thead class="bg-slate-950 text-slate-400 font-mono-num border-b border-slate-800">
-              <tr>
-                <th class="py-2 px-2">時間</th>
-                <th class="py-2 px-2">廠別</th>
-                <th class="py-2 px-2">項目</th>
-                <th class="py-2 px-2 text-slate-400">當前 K</th>
-                <th class="py-2 px-2 text-sky-400">調整後 K</th>
-                <th class="py-2 px-2 text-center">刪除</th>
-              </tr>
-            </thead>
-            <tbody id="pollutantHistoryTbody" class="divide-y divide-slate-800/60 font-mono-num">
-              <!-- Dynamic Pollutant Rows -->
-            </tbody>
-          </table>
-        </div>
-      </div>
+            <!-- 記錄表格 (螢幕簡潔呈現) -->
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full text-left border-collapse text-xs md:text-sm">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 border-b">
+                            <th class="p-2.5">時間</th>
+                            <th class="p-2.5">廠別</th>
+                            <th class="p-2.5">項目</th>
+                            <th class="p-2.5" id="th-col1">參數 1</th>
+                            <th class="p-2.5" id="th-col2">參數 2</th>
+                            <th class="p-2.5 text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-tbody" class="divide-y divide-slate-100">
+                        <tr><td colspan="6" class="p-4 text-center text-slate-400">載入紀錄中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
 
-      <!-- Clear & Info Footer -->
-      <div class="flex justify-between items-center pt-2 text-[11px] text-slate-500 border-t border-slate-800/60">
-        <span>* 完整濃度欄位可在 CSV 匯出檔查看</span>
-        <button onclick="clearHistory()" class="text-red-400 hover:underline">清除歷史紀錄</button>
-      </div>
-    </div>
+            <!-- 匯出按鈕 -->
+            <button onclick="exportCSV()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-sm shadow transition">📥 匯出完整參數 CSV 檔案</button>
+        </section>
 
-  </main>
+    </main>
 
-  <!-- Notification Toast -->
-  <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-800 border border-slate-700 text-white text-xs font-bold px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-2 pointer-events-none opacity-0 transition-all duration-300 transform translate-y-10">
-    <i id="toastIcon" data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
-    <span id="toastText">訊息</span>
-  </div>
-
-  <script>
-    // Global App State
-    let selectedPlant = '一廠';
-    let selectedGas = 'O2'; // O2, NO, NO2, SOx, CO, HCL
-    let activeRecordTab = 'O2'; // O2 or POLLUTANT
-    let calcResult = {};
-    
-    const STORAGE_KEY_O2 = 'mir9000_o2_bc_records_v2';
-    const STORAGE_KEY_POLLUTANT = 'mir9000_pollutant_k_records_v2';
-
-    const gasUnits = {
-      O2: '%',
-      NO: 'ppm',
-      NO2: 'ppm',
-      SOx: 'ppm',
-      CO: 'ppm',
-      HCL: 'ppm'
-    };
-
-    window.onload = function() {
-      lucide.createIcons();
-      calculate();
-      renderHistoryTables();
-    };
-
-    // Plant Switcher
-    function setPlant(plant) {
-      selectedPlant = plant;
-      const btn1 = document.getElementById('plantP1');
-      const btn2 = document.getElementById('plantP2');
-
-      if (plant === '一廠') {
-        btn1.className = "btn-segmented rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all bg-emerald-600 text-white shadow-lg border border-emerald-500";
-        btn2.className = "btn-segmented rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200";
-      } else {
-        btn2.className = "btn-segmented rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all bg-emerald-600 text-white shadow-lg border border-emerald-500";
-        btn1.className = "btn-segmented rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200";
-      }
-
-      calculate();
-    }
-
-    // Gas Item Switcher
-    function setGas(gas) {
-      selectedGas = gas;
-      const gases = ['O2', 'NO', 'NO2', 'SOx', 'CO', 'HCL'];
-
-      gases.forEach(g => {
-        const btn = document.getElementById('gas' + g);
-        if (g === gas) {
-          btn.className = "btn-segmented rounded-xl font-black text-sm flex flex-col items-center justify-center transition-all bg-sky-600 text-white border border-sky-400 shadow-md";
-        } else {
-          btn.className = "btn-segmented rounded-xl font-black text-sm flex flex-col items-center justify-center transition-all bg-slate-950 text-slate-300 border border-slate-800";
-        }
-      });
-
-      const modeBadge = document.getElementById('modeBadge');
-      const o2Form = document.getElementById('o2Form');
-      const pollutantForm = document.getElementById('pollutantForm');
-      const o2ResultsDisplay = document.getElementById('o2ResultsDisplay');
-      const pollutantResultsDisplay = document.getElementById('pollutantResultsDisplay');
-
-      if (gas === 'O2') {
-        modeBadge.textContent = "O2 BC 模式 (7位小數)";
-        o2Form.classList.remove('hidden');
-        pollutantForm.classList.add('hidden');
-        o2ResultsDisplay.classList.remove('hidden');
-        pollutantResultsDisplay.classList.add('hidden');
-        switchRecordTab('O2');
-      } else {
-        modeBadge.textContent = `${gas} K模式 (3位小數)`;
-        o2Form.classList.add('hidden');
-        pollutantForm.classList.remove('hidden');
-        o2ResultsDisplay.classList.add('hidden');
-        pollutantResultsDisplay.classList.remove('hidden');
-        switchRecordTab('POLLUTANT');
-      }
-
-      document.getElementById('gasUnitBadge').textContent = gasUnits[gas] || 'ppm';
-      document.querySelectorAll('.unitText').forEach(el => el.textContent = gasUnits[gas] || 'ppm');
-
-      calculate();
-    }
-
-    // Switch Record Table Tab
-    function switchRecordTab(tab) {
-      activeRecordTab = tab;
-      const tabO2Btn = document.getElementById('tabO2Btn');
-      const tabPollutantBtn = document.getElementById('tabPollutantBtn');
-      const o2TableContainer = document.getElementById('o2TableContainer');
-      const pollutantTableContainer = document.getElementById('pollutantTableContainer');
-      const historyFilterItem = document.getElementById('historyFilterItem');
-
-      if (tab === 'O2') {
-        tabO2Btn.className = "py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1 bg-sky-600 text-white border border-sky-400 shadow-md";
-        tabPollutantBtn.className = "py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1 bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200";
-        o2TableContainer.classList.remove('hidden');
-        pollutantTableContainer.classList.add('hidden');
-        historyFilterItem.classList.add('hidden');
-      } else {
-        tabPollutantBtn.className = "py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1 bg-sky-600 text-white border border-sky-400 shadow-md";
-        tabO2Btn.className = "py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1 bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200";
-        pollutantTableContainer.classList.remove('hidden');
-        o2TableContainer.classList.add('hidden');
-        historyFilterItem.classList.remove('hidden');
-      }
-
-      renderHistoryTables();
-    }
-
-    // Main Calculator Logic
-    function calculate() {
-      document.getElementById('currentSelectionTag').textContent = `${selectedPlant} - ${selectedGas}`;
-
-      if (selectedGas === 'O2') {
-        // O2 BC Calculation
-        const zTarget = parseFloat(document.getElementById('o2ZeroTarget').value) || 0;
-        const zRaw = parseFloat(document.getElementById('o2ZeroRaw').value) || 0;
-        const sTarget = parseFloat(document.getElementById('o2SpanTarget').value) || 0;
-        const sRaw = parseFloat(document.getElementById('o2SpanRaw').value) || 0;
-
-        const deltaRaw = sRaw - zRaw;
-        if (Math.abs(deltaRaw) < 0.000000001) {
-          document.getElementById('outB').textContent = "ERR";
-          document.getElementById('outC').textContent = "ERR";
-          return;
-        }
-
-        const B = (sTarget - zTarget) / deltaRaw;
-        const C = sTarget - (B * sRaw);
-
-        document.getElementById('outB').textContent = B.toFixed(7);
-        document.getElementById('outC').textContent = (C >= 0 ? '+' : '') + C.toFixed(7);
-
-        calcResult = {
-          mode: 'O2',
-          plant: selectedPlant,
-          gas: 'O2',
-          unit: '%',
-          zTarget: zTarget.toFixed(7),
-          zRaw: zRaw.toFixed(7),
-          sTarget: sTarget.toFixed(7),
-          sRaw: sRaw.toFixed(7),
-          B: B.toFixed(7),
-          C: C.toFixed(7)
+    <!-- 邏輯程式碼 -->
+    <script>
+        // 預設 Firebase 設定 (若無專案可透過畫面上的設定面板輸入)
+        let firebaseConfig = {
+            databaseURL: "https://cems-mir9000-default-rtdb.firebaseio.com/"
         };
 
-      } else {
-        // Pollutant K Adjustment Calculation
-        const currentConc = parseFloat(document.getElementById('pollutantCurrent').value) || 0;
-        const currentK = parseFloat(document.getElementById('pollutantCurrentK').value) || 0;
-        const targetConc = parseFloat(document.getElementById('pollutantTarget').value) || 0;
+        let db = null;
+        let isCloudConnected = false;
+        let allRecords = [];
 
-        if (currentK === 0 || currentConc === 0) {
-          document.getElementById('outCurrentK').textContent = currentK.toFixed(3);
-          document.getElementById('outNewK').textContent = "ERR";
-          return;
+        // 當前操作狀態
+        let currentPlant = '一廠';
+        let currentItem = 'O2';
+        let activeLogTab = 'o2'; // 'o2' 或 'k'
+
+        // 初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            initFirebase();
+            setPlant('一廠');
+            setItem('O2');
+        });
+
+        function initFirebase() {
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                db = firebase.database();
+                const ref = db.ref('cems_records');
+                
+                ref.on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    allRecords = [];
+                    if (data) {
+                        Object.keys(data).forEach(key => {
+                            allRecords.push({ id: key, ...data[key] });
+                        });
+                        // 依照時間排序 (新到舊)
+                        allRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    }
+                    updateConnectionStatus(true);
+                    renderHistory();
+                }, (error) => {
+                    console.warn("Firebase 監聽失敗，切換至離線模式:", error);
+                    updateConnectionStatus(false);
+                    loadLocalFallback();
+                });
+            } catch (e) {
+                console.warn("Firebase 初始化錯誤:", e);
+                updateConnectionStatus(false);
+                loadLocalFallback();
+            }
         }
 
-        const rawConc = currentConc / currentK;
-        const newK = targetConc / rawConc;
-
-        document.getElementById('outCurrentK').textContent = currentK.toFixed(3);
-        document.getElementById('outNewK').textContent = newK.toFixed(3);
-
-        calcResult = {
-          mode: 'POLLUTANT',
-          plant: selectedPlant,
-          gas: selectedGas,
-          unit: gasUnits[selectedGas] || 'ppm',
-          currentConc: currentConc.toFixed(3),
-          currentK: currentK.toFixed(3),
-          rawConc: rawConc.toFixed(3),
-          newK: newK.toFixed(3),
-          targetConc: targetConc.toFixed(3)
-        };
-      }
-    }
-
-    // Save Record to LocalStorage
-    function saveRecord() {
-      if (selectedGas === 'O2' && (!calcResult.B || calcResult.B === "ERR")) {
-        showToast("O2 計算結果錯誤，無法儲存", true);
-        return;
-      }
-      if (selectedGas !== 'O2' && (!calcResult.newK || calcResult.newK === "ERR")) {
-        showToast("K 值計算結果錯誤，無法儲存", true);
-        return;
-      }
-
-      const record = {
-        id: Date.now(),
-        timestamp: new Date().toLocaleString('zh-TW', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
-        ...calcResult
-      };
-
-      if (selectedGas === 'O2') {
-        const history = getHistory(STORAGE_KEY_O2);
-        history.unshift(record);
-        localStorage.setItem(STORAGE_KEY_O2, JSON.stringify(history));
-        switchRecordTab('O2');
-      } else {
-        const history = getHistory(STORAGE_KEY_POLLUTANT);
-        history.unshift(record);
-        localStorage.setItem(STORAGE_KEY_POLLUTANT, JSON.stringify(history));
-        switchRecordTab('POLLUTANT');
-      }
-
-      showToast(`已儲存 [${selectedPlant}-${selectedGas}] 校正紀錄`);
-    }
-
-    function getHistory(key) {
-      try {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : [];
-      } catch (e) {
-        return [];
-      }
-    }
-
-    // Render Both Separated Tables
-    function renderHistoryTables() {
-      const plantFilter = document.getElementById('historyFilterPlant').value;
-      const itemFilter = document.getElementById('historyFilterItem').value;
-
-      // 1. Render O2 Table
-      const o2History = getHistory(STORAGE_KEY_O2);
-      const o2Tbody = document.getElementById('o2HistoryTbody');
-      o2Tbody.innerHTML = '';
-
-      const filteredO2 = o2History.filter(item => plantFilter === 'ALL' || item.plant === plantFilter);
-
-      if (filteredO2.length === 0) {
-        o2Tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-slate-500 font-sans">無 O2 BC 校正紀錄</td></tr>`;
-      } else {
-        filteredO2.forEach(item => {
-          const tr = document.createElement('tr');
-          tr.className = "hover:bg-slate-800/40";
-          tr.innerHTML = `
-            <td class="py-2.5 px-2 text-slate-400 text-[11px]">${item.timestamp}</td>
-            <td class="py-2.5 px-2 font-bold text-emerald-400">${item.plant}</td>
-            <td class="py-2.5 px-2 font-bold text-amber-300 font-mono-num">${item.B}</td>
-            <td class="py-2.5 px-2 font-bold text-emerald-300 font-mono-num">${item.C}</td>
-            <td class="py-2.5 px-2 text-center">
-              <button onclick="deleteRecord('${STORAGE_KEY_O2}', ${item.id})" class="p-1 text-slate-500 hover:text-red-400">
-                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-              </button>
-            </td>
-          `;
-          o2Tbody.appendChild(tr);
-        });
-      }
-
-      // 2. Render Pollutant Table
-      const pollutantHistory = getHistory(STORAGE_KEY_POLLUTANT);
-      const pollutantTbody = document.getElementById('pollutantHistoryTbody');
-      pollutantTbody.innerHTML = '';
-
-      const filteredPollutant = pollutantHistory.filter(item => {
-        const matchPlant = plantFilter === 'ALL' || item.plant === plantFilter;
-        const matchItem = itemFilter === 'ALL' || item.gas === itemFilter;
-        return matchPlant && matchItem;
-      });
-
-      if (filteredPollutant.length === 0) {
-        pollutantTbody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-slate-500 font-sans">無污染物 K 值紀錄</td></tr>`;
-      } else {
-        filteredPollutant.forEach(item => {
-          const tr = document.createElement('tr');
-          tr.className = "hover:bg-slate-800/40";
-          tr.innerHTML = `
-            <td class="py-2.5 px-2 text-slate-400 text-[11px]">${item.timestamp}</td>
-            <td class="py-2.5 px-2 font-bold text-emerald-400">${item.plant}</td>
-            <td class="py-2.5 px-2 font-bold text-white">${item.gas}</td>
-            <td class="py-2.5 px-2 text-slate-300 font-mono-num">${item.currentK}</td>
-            <td class="py-2.5 px-2 font-bold text-sky-400 font-mono-num">${item.newK}</td>
-            <td class="py-2.5 px-2 text-center">
-              <button onclick="deleteRecord('${STORAGE_KEY_POLLUTANT}', ${item.id})" class="p-1 text-slate-500 hover:text-red-400">
-                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-              </button>
-            </td>
-          `;
-          pollutantTbody.appendChild(tr);
-        });
-      }
-
-      lucide.createIcons();
-    }
-
-    function deleteRecord(key, id) {
-      let history = getHistory(key);
-      history = history.filter(i => i.id !== id);
-      localStorage.setItem(key, JSON.stringify(history));
-      renderHistoryTables();
-      showToast("已刪除紀錄");
-    }
-
-    function clearHistory() {
-      const activeKey = activeRecordTab === 'O2' ? STORAGE_KEY_O2 : STORAGE_KEY_POLLUTANT;
-      const tabName = activeRecordTab === 'O2' ? 'O2 BC 校正' : '污染物 K 值';
-
-      if (confirm(`確定要清除所有 ${tabName} 歷史紀錄嗎？`)) {
-        localStorage.removeItem(activeKey);
-        renderHistoryTables();
-        showToast(`已清除 ${tabName} 歷史紀錄`);
-      }
-    }
-
-    // Export Active CSV
-    function exportActiveCSV() {
-      if (activeRecordTab === 'O2') {
-        const history = getHistory(STORAGE_KEY_O2);
-        if (history.length === 0) {
-          showToast("尚無 O2 BC 紀錄可匯出", true);
-          return;
+        function updateConnectionStatus(connected) {
+            isCloudConnected = connected;
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+            if (connected) {
+                dot.className = "w-3 h-3 rounded-full bg-emerald-400";
+                text.innerText = "雲端即時同步中 (Online)";
+            } else {
+                dot.className = "w-3 h-3 rounded-full bg-rose-500";
+                text.innerText = "離線模式 (Local)";
+            }
         }
 
-        let csv = "\uFEFF時間,廠別,項目,低點Raw,低點Target,高點Raw,高點Target,新B值,新C值\n";
-        history.forEach(r => {
-          csv += `"${r.timestamp}","${r.plant}","O2","${r.zRaw}","${r.zTarget}","${r.sRaw}","${r.sTarget}","${r.B}","${r.C}"\n`;
-        });
-
-        downloadCSV(csv, `MIR9000_O2_BC_Records_${new Date().toISOString().slice(0,10)}.csv`);
-      } else {
-        const history = getHistory(STORAGE_KEY_POLLUTANT);
-        if (history.length === 0) {
-          showToast("尚無 K 值紀錄可匯出", true);
-          return;
+        function toggleConfig() {
+            const card = document.getElementById('firebase-config-card');
+            card.classList.toggle('hidden');
         }
 
-        let csv = "\uFEFF時間,廠別,項目,單位,當前濃度,當前K值,原始濃度,調整後K值,目標鋼瓶濃度\n";
-        history.forEach(r => {
-          csv += `"${r.timestamp}","${r.plant}","${r.gas}","${r.unit}","${r.currentConc}","${r.currentK}","${r.rawConc}","${r.newK}","${r.targetConc}"\n`;
-        });
+        function saveFirebaseConfig() {
+            const val = document.getElementById('fb-config-input').value.trim();
+            try {
+                const parsed = JSON.parse(val);
+                if (parsed.databaseURL) {
+                    firebaseConfig.databaseURL = parsed.databaseURL;
+                    localStorage.setItem('cems_fb_config', JSON.stringify(firebaseConfig));
+                    location.reload();
+                } else {
+                    alert('格式錯誤，必須包含 databaseURL');
+                }
+            } catch(e) {
+                alert('JSON 格式不正確');
+            }
+        }
 
-        downloadCSV(csv, `MIR9000_Pollutant_K_Records_${new Date().toISOString().slice(0,10)}.csv`);
-      }
-    }
+        // 廠別切換
+        function setPlant(plant) {
+            currentPlant = plant;
+            document.getElementById('btn-plant-一廠').className = plant === '一廠' ? 'py-3 px-4 text-center text-lg font-bold rounded-xl border-2 btn-active' : 'py-3 px-4 text-center text-lg font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700';
+            document.getElementById('btn-plant-二廠').className = plant === '二廠' ? 'py-3 px-4 text-center text-lg font-bold rounded-xl border-2 btn-active' : 'py-3 px-4 text-center text-lg font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700';
+        }
 
-    function downloadCSV(csv, filename) {
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast("已匯出 CSV 報表");
-    }
+        // 項目切換
+        function setItem(item) {
+            currentItem = item;
+            const items = ['O2', 'NO', 'NO2', 'SOx', 'CO', 'HCL'];
+            items.forEach(i => {
+                const btn = document.getElementById(`btn-item-${i}`);
+                if (i === item) {
+                    btn.className = 'py-3 text-center text-base font-bold rounded-xl border-2 btn-active';
+                } else {
+                    btn.className = 'py-3 text-center text-base font-bold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700';
+                }
+            });
 
-    // Copy parameters to clipboard
-    function copyToClipboard() {
-      let text = "";
-      if (selectedGas === 'O2') {
-        text = `[${selectedPlant}] O2 校正參數: 新B值=${calcResult.B}, 新C值=${calcResult.C}`;
-      } else {
-        text = `[${selectedPlant}] ${selectedGas} K值參數: 當前K=${calcResult.currentK}, 調整後K=${calcResult.newK}`;
-      }
+            // 切換計算介面
+            const modeO2 = document.getElementById('mode-o2');
+            const modeK = document.getElementById('mode-k');
+            const kTitle = document.getElementById('k-mode-title');
 
-      const el = document.createElement('textarea');
-      el.value = text;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
+            if (item === 'O2') {
+                modeO2.classList.remove('hidden');
+                modeK.classList.add('hidden');
+            } else {
+                modeO2.classList.add('hidden');
+                modeK.classList.remove('hidden');
+                kTitle.innerText = `${item} 污染物 K 值動態調整`;
+            }
+        }
 
-      showToast("數值已複製到剪貼簿");
-    }
+        // 計算 O2 BC
+        function calculateO2() {
+            const x0 = parseFloat(document.getElementById('o2-x0').value);
+            const y0 = parseFloat(document.getElementById('o2-y0').value);
+            const x1 = parseFloat(document.getElementById('o2-x1').value);
+            const y1 = parseFloat(document.getElementById('o2-y1').value);
 
-    function clearAllFields() {
-      document.getElementById('o2ZeroTarget').value = "0.0000000";
-      document.getElementById('o2ZeroRaw').value = "0.0000000";
-      document.getElementById('o2SpanTarget').value = "20.9000000";
-      document.getElementById('o2SpanRaw').value = "20.9000000";
+            if (isNaN(x0) || isNaN(y0) || isNaN(x1) || isNaN(y1)) {
+                alert('請完整填寫 O2 高低點數值');
+                return;
+            }
+            if (x1 === x0) {
+                alert('高低點原始訊號不能相同');
+                return;
+            }
 
-      document.getElementById('pollutantCurrent').value = "0.000";
-      document.getElementById('pollutantCurrentK').value = "1.000";
-      document.getElementById('pollutantTarget').value = "0.000";
+            const B = (y1 - y0) / (x1 - x0);
+            const C = y0 - (B * x0);
 
-      calculate();
-      showToast("輸入欄位已重置");
-    }
+            document.getElementById('res-o2-b').innerText = B.toFixed(7);
+            document.getElementById('res-o2-c').innerText = C.toFixed(7);
+            return { B: B.toFixed(7), C: C.toFixed(7), x0, y0, x1, y1 };
+        }
 
-    function showToast(msg, isError = false) {
-      const toast = document.getElementById('toast');
-      const toastText = document.getElementById('toastText');
-      const toastIcon = document.getElementById('toastIcon');
+        // 計算 K 值
+        function calculateK() {
+            const currConc = parseFloat(document.getElementById('k-current-conc').value);
+            const currK = parseFloat(document.getElementById('k-current-k').value);
+            const targetConc = parseFloat(document.getElementById('k-target-conc').value);
 
-      toastText.textContent = msg;
-      if (isError) {
-        toastIcon.setAttribute('data-lucide', 'alert-circle');
-        toastIcon.className = 'w-4 h-4 text-red-400';
-      } else {
-        toastIcon.setAttribute('data-lucide', 'check-circle');
-        toastIcon.className = 'w-4 h-4 text-emerald-400';
-      }
-      lucide.createIcons();
+            if (isNaN(currConc) || isNaN(currK) || isNaN(targetConc)) {
+                alert('請完整填寫當前濃度、當前 K 值與目標濃度');
+                return;
+            }
+            if (currConc === 0 || currK === 0) {
+                alert('當前濃度或當前 K 值不能為 0');
+                return;
+            }
 
-      toast.classList.remove('opacity-0', 'translate-y-10');
-      toast.classList.add('opacity-100', 'translate-y-0');
+            const rawConc = currConc / currK;
+            const newK = (targetConc / rawConc);
 
-      setTimeout(() => {
-        toast.classList.remove('opacity-100', 'translate-y-0');
-        toast.classList.add('opacity-0', 'translate-y-10');
-      }, 2500);
-    }
-  </script>
+            document.getElementById('res-k-current').innerText = currK.toFixed(3);
+            document.getElementById('res-k-new').innerText = newK.toFixed(3);
+
+            return {
+                currentConc: currConc,
+                currentK: currK.toFixed(3),
+                rawConc: rawConc.toFixed(3),
+                targetConc: targetConc,
+                newK: newK.toFixed(3)
+            };
+        }
+
+        // 儲存紀錄
+        function saveRecord() {
+            let recordData = {
+                timestamp: new Date().toISOString(),
+                formattedTime: new Date().toLocaleString(),
+                plant: currentPlant,
+                item: currentItem
+            };
+
+            if (currentItem === 'O2') {
+                const res = calculateO2();
+                if (!res) return;
+                recordData.type = 'O2';
+                recordData.b = res.B;
+                recordData.c = res.C;
+                recordData.x0 = res.x0;
+                recordData.y0 = res.y0;
+                recordData.x1 = res.x1;
+                recordData.y1 = res.y1;
+            } else {
+                const res = calculateK();
+                if (!res) return;
+                recordData.type = 'K';
+                recordData.currentConc = res.currentConc;
+                recordData.currentK = res.currentK;
+                recordData.rawConc = res.rawConc;
+                recordData.targetConc = res.targetConc;
+                recordData.newK = res.newK;
+            }
+
+            if (isCloudConnected && db) {
+                db.ref('cems_records').push(recordData, (error) => {
+                    if (error) {
+                        alert('雲端儲存失敗，已改存至本機');
+                        saveLocalFallbackRecord(recordData);
+                    } else {
+                        alert('✅ 成功儲存至雲端紀錄！');
+                    }
+                });
+            } else {
+                saveLocalFallbackRecord(recordData);
+                alert('✅ 成功儲存至本機紀錄！');
+            }
+        }
+
+        function saveLocalFallbackRecord(data) {
+            let local = JSON.parse(localStorage.getItem('cems_local_logs') || '[]');
+            data.id = 'local_' + Date.now();
+            local.unshift(data);
+            localStorage.setItem('cems_local_logs', JSON.stringify(local));
+            allRecords = local;
+            renderHistory();
+        }
+
+        function loadLocalFallback() {
+            let local = JSON.parse(localStorage.getItem('cems_local_logs') || '[]');
+            allRecords = local;
+            renderHistory();
+        }
+
+        // 歷史分頁切換
+        function switchLogTab(tab) {
+            activeLogTab = tab;
+            const btnO2 = document.getElementById('tab-log-o2');
+            const btnK = document.getElementById('tab-log-k');
+            const itemFilterContainer = document.getElementById('filter-item-container');
+
+            if (tab === 'o2') {
+                btnO2.className = "px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white shadow-sm";
+                btnK.className = "px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 text-slate-700";
+                itemFilterContainer.style.display = 'none';
+            } else {
+                btnK.className = "px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white shadow-sm";
+                btnO2.className = "px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 text-slate-700";
+                itemFilterContainer.style.display = 'block';
+            }
+            renderHistory();
+        }
+
+        // 渲染歷史紀錄表格
+        function renderHistory() {
+            const tbody = document.getElementById('history-tbody');
+            const plantFilter = document.getElementById('filter-plant').value;
+            const itemFilter = document.getElementById('filter-item').value;
+
+            const th1 = document.getElementById('th-col1');
+            const th2 = document.getElementById('th-col2');
+
+            if (activeLogTab === 'o2') {
+                th1.innerText = "新 B 值";
+                th2.innerText = "新 C 值";
+            } else {
+                th1.innerText = "當前 K 值";
+                th2.innerText = "調整後 K 值";
+            }
+
+            // 過濾資料
+            let filtered = allRecords.filter(r => {
+                if (activeLogTab === 'o2') {
+                    if (r.item !== 'O2') return false;
+                } else {
+                    if (r.item === 'O2') return false;
+                    if (itemFilter !== 'All' && itemFilter !== '全部' && r.item !== itemFilter) return false;
+                }
+                if (plantFilter !== 'All' && plantFilter !== '全部' && r.plant !== plantFilter) return false;
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">目前尚無符合的校正紀錄</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(r => {
+                let col1Val = activeLogTab === 'o2' ? r.b : r.currentK;
+                let col2Val = activeLogTab === 'o2' ? r.c : r.newK;
+
+                html += `
+                    <tr class="border-b hover:bg-slate-50 transition">
+                        <td class="p-2.5 text-slate-500 whitespace-nowrap">${r.formattedTime || new Date(r.timestamp).toLocaleString()}</td>
+                        <td class="p-2.5 font-bold text-slate-700">${r.plant}</td>
+                        <td class="p-2.5 font-bold text-blue-600">${r.item}</td>
+                        <td class="p-2.5 font-mono font-semibold">${col1Val || '-'}</td>
+                        <td class="p-2.5 font-mono font-semibold text-emerald-600">${col2Val || '-'}</td>
+                        <td class="p-2.5 text-right">
+                            <button onclick="deleteRecord('${r.id}')" class="text-rose-500 hover:text-rose-700 text-xs px-2 py-1 bg-rose-50 rounded">刪除</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // 刪除紀錄
+        function deleteRecord(id) {
+            if (!confirm('確定要刪除這筆紀錄嗎？')) return;
+            if (id.startsWith('local_')) {
+                let local = JSON.parse(localStorage.getItem('cems_local_logs') || '[]');
+                local = local.filter(r => r.id !== id);
+                localStorage.setItem('cems_local_logs', JSON.stringify(local));
+                allRecords = local;
+                renderHistory();
+            } else if (db) {
+                db.ref(`cems_records/${id}`).remove().catch(err => {
+                    alert('刪除失敗: ' + err.message);
+                });
+            }
+        }
+
+        // 匯出 CSV (包含所有隱藏的完整參數)
+        function exportCSV() {
+            if (allRecords.length === 0) {
+                alert('目前沒有可匯出的紀錄');
+                return;
+            }
+
+            let csv = '\uFEFF時間,廠別,項目,當前濃度,當前K值,原始濃度,調整後K值,目標濃度,新B值,新C值\n';
+            allRecords.forEach(r => {
+                csv += `"${r.formattedTime || ''}","${r.plant}","${r.item}","${r.currentConc || ''}","${r.currentK || ''}","${r.rawConc || ''}","${r.newK || ''}","${r.targetConc || ''}","${r.b || ''}","${r.c || ''}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `CEMS_MIR9000_校正紀錄_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
 </body>
 </html>
